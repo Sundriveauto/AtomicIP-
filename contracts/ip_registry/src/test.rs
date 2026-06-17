@@ -22,7 +22,7 @@ mod tests {
             blinding_factor: BytesN<32>,
         ) -> bool;
         fn list_ip_by_owner(env: Env, owner: Address) -> Vec<u64>;
-        fn get_stake(env: Env, ip_id: u64) -> Option<StakeRecord>;
+        fn get_stake(env: Env, ip_id: u64) -> Option<crate::StakeRecord>;
         fn transfer_ip(env: Env, ip_id: u64, new_owner: Address);
         fn transfer_ip_ownership(env: Env, ip_id: u64, new_owner: Address);
         fn revoke_ip(env: Env, ip_id: u64);
@@ -166,19 +166,33 @@ mod tests {
 
         // Check events immediately after commit_ip, before any other calls.
         let all_events = env.events().all();
-        assert_eq!(all_events.len(), 1);
-        let event = all_events.get(0).unwrap();
-        let expected_topics = (symbol_short!("ip_commit"), owner.clone()).into_val(&env);
-        assert_eq!(event.1, expected_topics);
-        let observed_data: (u64, u64) = TryFromVal::try_from_val(&env, &event.2).unwrap();
-        assert_eq!(observed_data.0, ip_id);
+        assert_eq!(all_events.events().len(), 1);
+        let event = &all_events.events()[0];
+        let soroban_sdk::xdr::ContractEventBody::V0(v0) = &event.body;
+        let topics: soroban_sdk::Vec<soroban_sdk::Val> =
+            soroban_sdk::Vec::try_from_val(&env, &v0.topics).unwrap();
+        assert_eq!(topics.len(), 2);
+        let topic0: soroban_sdk::Symbol =
+            soroban_sdk::Symbol::try_from_val(&env, &topics.get(0).unwrap()).unwrap();
+        assert_eq!(topic0, symbol_short!("ip_commit"));
+        let topic1: soroban_sdk::Address =
+            soroban_sdk::Address::try_from_val(&env, &topics.get(1).unwrap()).unwrap();
+        assert_eq!(topic1, owner);
 
-        // Verify the record separately.
-        let record = client.get_ip(&ip_id);
-        assert_eq!(record.owner, owner);
-        assert_eq!(record.commitment_hash, commitment);
-        assert_eq!(record.ip_id, ip_id);
-        assert_eq!(observed_data.1, record.timestamp);
+        let data_vec: soroban_sdk::Vec<soroban_sdk::Val> =
+            soroban_sdk::Vec::try_from_val(&env, &v0.data).unwrap();
+        let observed_ip_id: u64 =
+            u64::try_from_val(&env, &data_vec.get(0).unwrap()).unwrap();
+        let observed_ts: u64 =
+            u64::try_from_val(&env, &data_vec.get(1).unwrap()).unwrap();
+        assert_eq!(observed_ip_id, ip_id);
+
+            // Verify the record separately.
+            let record = client.get_ip(&ip_id);
+            assert_eq!(record.owner, owner);
+            assert_eq!(record.commitment_hash, commitment);
+            assert_eq!(record.ip_id, ip_id);
+            assert_eq!(observed_ts, record.timestamp);
     }
 
     #[test]
@@ -407,12 +421,25 @@ mod tests {
         client.transfer_ip(&ip_id, &bob);
 
         let all_events = env.events().all();
-        assert!(all_events.len() > 0);
-        let event = all_events.get(all_events.len() - 1).unwrap();
-        let expected_topics = (TRANSFER_TOPIC, ip_id).into_val(&env);
-        assert_eq!(event.1, expected_topics);
-        let (old_owner, new_owner): (Address, Address) =
-            TryFromVal::try_from_val(&env, &event.2).unwrap();
+        assert!(!all_events.events().is_empty());
+        let event = &all_events.events()[all_events.events().len() - 1];
+        let soroban_sdk::xdr::ContractEventBody::V0(v0) = &event.body;
+        let topics: soroban_sdk::Vec<soroban_sdk::Val> =
+            soroban_sdk::Vec::try_from_val(&env, &v0.topics).unwrap();
+        assert_eq!(topics.len(), 2);
+        let topic0: soroban_sdk::Symbol =
+            soroban_sdk::Symbol::try_from_val(&env, &topics.get(0).unwrap()).unwrap();
+        assert_eq!(topic0, TRANSFER_TOPIC);
+        let topic1: u64 =
+            u64::try_from_val(&env, &topics.get(1).unwrap()).unwrap();
+        assert_eq!(topic1, ip_id);
+
+        let data_vec: soroban_sdk::Vec<soroban_sdk::Val> =
+            soroban_sdk::Vec::try_from_val(&env, &v0.data).unwrap();
+        let old_owner: Address =
+            Address::try_from_val(&env, &data_vec.get(0).unwrap()).unwrap();
+        let new_owner: Address =
+            Address::try_from_val(&env, &data_vec.get(1).unwrap()).unwrap();
         assert_eq!(old_owner, alice);
         assert_eq!(new_owner, bob);
     }
@@ -524,12 +551,24 @@ mod tests {
         client.revoke_ip(&ip_id);
 
         let all_events = env.events().all();
-        assert!(all_events.len() > 0);
-        let event = all_events.get(all_events.len() - 1).unwrap();
-        let expected_topics = (REVOKE_TOPIC, owner.clone()).into_val(&env);
-        assert_eq!(event.1, expected_topics);
-        let observed_data: (u64, u64) = TryFromVal::try_from_val(&env, &event.2).unwrap();
-        assert_eq!(observed_data.0, ip_id);
+        assert!(!all_events.events().is_empty());
+        let event = &all_events.events()[all_events.events().len() - 1];
+        let soroban_sdk::xdr::ContractEventBody::V0(v0) = &event.body;
+        let topics: soroban_sdk::Vec<soroban_sdk::Val> =
+            soroban_sdk::Vec::try_from_val(&env, &v0.topics).unwrap();
+        assert_eq!(topics.len(), 2);
+        let topic0: soroban_sdk::Symbol =
+            soroban_sdk::Symbol::try_from_val(&env, &topics.get(0).unwrap()).unwrap();
+        assert_eq!(topic0, REVOKE_TOPIC);
+        let topic1: soroban_sdk::Address =
+            soroban_sdk::Address::try_from_val(&env, &topics.get(1).unwrap()).unwrap();
+        assert_eq!(topic1, owner);
+
+        let data_vec: soroban_sdk::Vec<soroban_sdk::Val> =
+            soroban_sdk::Vec::try_from_val(&env, &v0.data).unwrap();
+        let observed_ip_id: u64 =
+            u64::try_from_val(&env, &data_vec.get(0).unwrap()).unwrap();
+        assert_eq!(observed_ip_id, ip_id);
     }
 
     #[test]
@@ -1057,10 +1096,7 @@ mod tests {
         // entropy_score = (29 * 50) / 32 = 45
         // pow_score = (32 * 50) / 32 = 50
         // total = 95
-        let mut hash_bytes = [0u8; 32];
-        for i in 0..32 {
-            hash_bytes[i] = i as u8;
-        }
+        let mut hash_bytes: [u8; 32] = core::array::from_fn(|i| i as u8);
         hash_bytes[0] = 0;
         hash_bytes[1] = 0;
         hash_bytes[2] = 0;
@@ -1084,13 +1120,8 @@ mod tests {
         // entropy_score = (25 * 50) / 32 = 39
         // pow_score = 50
         // total = 89
-        let mut hash_bytes = [0u8; 32];
-        for i in 0..32 {
-            hash_bytes[i] = i as u8;
-        }
-        for i in 0..8 {
-            hash_bytes[i] = 0;
-        }
+        let mut hash_bytes: [u8; 32] = core::array::from_fn(|i| i as u8);
+        hash_bytes[..8].fill(0);
         let hash = BytesN::from_array(&env, &hash_bytes);
         let ip_id = client.commit_ip(&owner, &hash, &64u32);
         let strength = client.get_ip_strength(&ip_id);
@@ -1109,10 +1140,7 @@ mod tests {
         // entropy_score = (16 * 50) / 32 = 25
         // pow_score = (16 * 50) / 32 = 25
         // total = 50
-        let mut hash_bytes = [0u8; 32];
-        for i in 0..32 {
-            hash_bytes[i] = (i % 16) as u8;
-        }
+        let mut hash_bytes: [u8; 32] = core::array::from_fn(|i| (i % 16) as u8);
         hash_bytes[0] = 0;
         hash_bytes[1] = 0;
         let hash = BytesN::from_array(&env, &hash_bytes);
@@ -1278,7 +1306,7 @@ mod tests {
         let d = disputes.get(0).unwrap();
         assert_eq!(d.challenger, challenger);
         assert_eq!(d.reason, reason);
-        assert_eq!(d.resolved, false);
+        assert!(!d.resolved);
     }
 
     #[test]
@@ -1339,8 +1367,6 @@ mod tests {
 
     #[test]
     fn test_notarize_ip_timestamp_with_valid_signature() {
-        use ed25519_dalek::{Signer, SigningKey};
-
         let env = Env::default();
         env.mock_all_auths();
         let contract_id = env.register(crate::IpRegistry, ());
@@ -1849,9 +1875,12 @@ mod tests {
         );
 
         let events = env.events().all();
-        let found = events.iter().any(|(_, topics, _)| {
-            if let Ok(t) = soroban_sdk::Vec::<soroban_sdk::Val>::try_from_val(&env, &topics) {
-                if let Some(v) = t.get(0) {
+        let found = events.events().iter().any(|event| {
+            let soroban_sdk::xdr::ContractEventBody::V0(v0) = &event.body;
+            if let Ok(topics) =
+                soroban_sdk::Vec::<soroban_sdk::Val>::try_from_val(&env, &v0.topics)
+            {
+                if let Some(v) = topics.get(0) {
                     if let Ok(s) = soroban_sdk::Symbol::try_from_val(&env, &v) {
                         return s == soroban_sdk::symbol_short!("dispute");
                     }
@@ -2074,10 +2103,18 @@ mod tests {
         assert!(is_expiring);
 
         let events = env.events().all();
-        assert!(events.len() > 0, "Expiration warning event should be emitted");
-        let event = events.get(0).unwrap();
-        let expected_topics = (symbol_short!("exp_warn"), ip_id).into_val(&env);
-        assert_eq!(event.1, expected_topics);
+        assert!(!events.events().is_empty(), "Expiration warning event should be emitted");
+        let event = &events.events()[0];
+        let soroban_sdk::xdr::ContractEventBody::V0(v0) = &event.body;
+        let topics: soroban_sdk::Vec<soroban_sdk::Val> =
+            soroban_sdk::Vec::try_from_val(&env, &v0.topics).unwrap();
+        assert!(topics.len() >= 2);
+        let topic0: soroban_sdk::Symbol =
+            soroban_sdk::Symbol::try_from_val(&env, &topics.get(0).unwrap()).unwrap();
+        assert_eq!(topic0, symbol_short!("exp_warn"));
+        let topic1: u64 =
+            u64::try_from_val(&env, &topics.get(1).unwrap()).unwrap();
+        assert_eq!(topic1, ip_id);
     }
 
     // ── Tests for batch_commit_ip_anonymous ───────────────────────────────────
@@ -2203,31 +2240,52 @@ mod tests {
         );
 
         let all_events = env.events().all();
+        let emitted = all_events.events();
         // Exactly two ip_commit_a events (one per hash).
-        let anon_events: soroban_sdk::Vec<_> = {
-            let mut v = soroban_sdk::Vec::new(&env);
-            for e in all_events.iter() {
-                let topic = e.0.clone();
-                let topics = e.1.clone();
-                let data = e.2.clone();
-                if let Ok(t) = soroban_sdk::Vec::<soroban_sdk::Val>::try_from_val(&env, &topics) {
-                    if let Some(first) = t.get(0) {
-                        if let Ok(s) = soroban_sdk::Symbol::try_from_val(&env, &first) {
-                            if s == symbol_short!("ip_cmt_a") {
-                                v.push_back((topic, topics, data));
-                            }
+        let mut count = 0u32;
+        for event in emitted.iter() {
+            let soroban_sdk::xdr::ContractEventBody::V0(v0) = &event.body;
+            if let Ok(t) =
+                soroban_sdk::Vec::<soroban_sdk::Val>::try_from_val(&env, &v0.topics)
+            {
+                if let Some(first) = t.get(0) {
+                    if let Ok(s) =
+                        soroban_sdk::Symbol::try_from_val(&env, &first)
+                    {
+                        if s == symbol_short!("ip_cmt_a") {
+                            count += 1;
                         }
                     }
                 }
             }
-            v
-        };
-        assert_eq!(anon_events.len(), 2, "expected one event per commitment");
+        }
+        assert_eq!(count, 2, "expected one event per commitment");
 
         // Verify first event data contains the correct ip_id and blinded_owner.
-        let (_, _, data) = anon_events.get(0).unwrap();
-        let (event_id, _ts, event_blinded): (u64, u64, BytesN<32>) =
-            TryFromVal::try_from_val(&env, &data).unwrap();
+        let anon_event = emitted.iter().find(|event| {
+            let soroban_sdk::xdr::ContractEventBody::V0(v0) = &event.body;
+            if let Ok(t) =
+                soroban_sdk::Vec::<soroban_sdk::Val>::try_from_val(&env, &v0.topics)
+            {
+                if let Some(first) = t.get(0) {
+                    if let Ok(s) =
+                        soroban_sdk::Symbol::try_from_val(&env, &first)
+                    {
+                        return s == symbol_short!("ip_cmt_a");
+                    }
+                }
+            }
+            false
+        }).unwrap();
+        let soroban_sdk::xdr::ContractEventBody::V0(v0) = &anon_event.body;
+        let data_vec: soroban_sdk::Vec<soroban_sdk::Val> =
+            soroban_sdk::Vec::try_from_val(&env, &v0.data).unwrap();
+        let event_id: u64 =
+            u64::try_from_val(&env, &data_vec.get(0).unwrap()).unwrap();
+        let _ts: u64 =
+            u64::try_from_val(&env, &data_vec.get(1).unwrap()).unwrap();
+        let event_blinded: soroban_sdk::BytesN<32> =
+            soroban_sdk::BytesN::try_from_val(&env, &data_vec.get(2).unwrap()).unwrap();
         assert_eq!(event_id, ids.get(0).unwrap());
         assert_eq!(event_blinded, blinded_owner);
     }
@@ -2322,8 +2380,9 @@ mod tests {
 
 #[cfg(test)]
 mod expiry_tests {
-    use super::*;
-    use soroban_sdk::{testutils::{Address as _, Ledger}, BytesN, Env, Vec};
+    use crate::{IpRegistry, IpRegistryClient};
+    use soroban_sdk::testutils::{Address as _, Events, Ledger};
+    use soroban_sdk::{Address, BytesN, Env, TryFromVal, Vec};
 
     fn setup() -> (Env, IpRegistryClient<'static>, Address, u64) {
         let env = Env::default();
@@ -2422,9 +2481,12 @@ mod expiry_tests {
         client.renew_ip_commitment(&ip_id, &(now + 2000));
 
         let events = env.events().all();
-        let found = events.iter().any(|(_, topics, _)| {
-            if let Ok(t) = soroban_sdk::Vec::<soroban_sdk::Val>::try_from_val(&env, &topics) {
-                if let Some(v) = t.get(0) {
+        let found = events.events().iter().any(|event| {
+            let soroban_sdk::xdr::ContractEventBody::V0(v0) = &event.body;
+            if let Ok(topics) =
+                soroban_sdk::Vec::<soroban_sdk::Val>::try_from_val(&env, &v0.topics)
+            {
+                if let Some(v) = topics.get(0) {
                     if let Ok(s) = soroban_sdk::Symbol::try_from_val(&env, &v) {
                         return s == soroban_sdk::symbol_short!("ip_renew");
                     }
@@ -2447,9 +2509,12 @@ mod expiry_tests {
         client.cleanup_expired_ips(&ids);
 
         let events = env.events().all();
-        let found = events.iter().any(|(_, topics, _)| {
-            if let Ok(t) = soroban_sdk::Vec::<soroban_sdk::Val>::try_from_val(&env, &topics) {
-                if let Some(v) = t.get(0) {
+        let found = events.events().iter().any(|event| {
+            let soroban_sdk::xdr::ContractEventBody::V0(v0) = &event.body;
+            if let Ok(topics) =
+                soroban_sdk::Vec::<soroban_sdk::Val>::try_from_val(&env, &v0.topics)
+            {
+                if let Some(v) = topics.get(0) {
                     if let Ok(s) = soroban_sdk::Symbol::try_from_val(&env, &v) {
                         return s == soroban_sdk::symbol_short!("ip_clean");
                     }
@@ -2465,8 +2530,9 @@ mod expiry_tests {
 
 #[cfg(test)]
 mod blinded_owner_batch_tests {
-    use super::tests::{IpRegistry, IpRegistryClient};
-    use soroban_sdk::{contractclient, testutils::Address as _, Address, BytesN, Env, Vec};
+    use crate::IpRegistryClient;
+    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::{Address, BytesN, Env, Vec};
 
     fn setup() -> (Env, IpRegistryClient<'static>) {
         let env = Env::default();
@@ -2661,7 +2727,7 @@ mod batch_escrow_tests {
         let id = env.register(crate::IpRegistry, ());
         let client = IpRegistryClient::new(&env, &id);
         let fake_id = BytesN::from_array(&env, &[0xFFu8; 32]);
-        assert_eq!(client.get_batch_escrow(&fake_id), None);
+        assert!(client.get_batch_escrow(&fake_id).is_none());
     }
 
     #[test]

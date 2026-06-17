@@ -16,8 +16,11 @@ pub const TRANSFER_TOPIC: Symbol = soroban_sdk::symbol_short!("ip_xfer");
 
 /// Access tier constants for tiered IP access control.
 /// Tiers are hierarchical: transfer implies verify, verify implies view.
+#[allow(dead_code)]
 pub const ACCESS_VIEW: u32 = 1;     // Can read IP metadata
+#[allow(dead_code)]
 pub const ACCESS_VERIFY: u32 = 2;   // Can verify the commitment (view + verify)
+#[allow(dead_code)]
 pub const ACCESS_TRANSFER: u32 = 3; // Can initiate transfer (view + verify + transfer)
 
 #[contracttype]

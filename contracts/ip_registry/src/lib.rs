@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(deprecated)]
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, Address,
     Bytes, BytesN, Env, Error, Vec,
@@ -11,28 +12,30 @@ mod types;
 use types::*;
 
 // FIXME: test.rs has compilation errors from merge conflict - re-enable after fix
-// FIXME: test.rs has pre-existing compilation errors from a merge conflict - fix before enabling
-// #[cfg(test)]
-// mod test;
-
-// FIXME: benchmarks.rs has pre-existing compilation errors from a merge conflict
-// #[cfg(test)]
-// mod benchmarks;
+#[cfg(test)]
+mod test;
 
 #[cfg(test)]
+mod benchmarks;
+
+#[cfg(test)]
+#[allow(clippy::module_inception)]
 mod mutation_tests;
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod snapshot_tests;
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod differential_tests;
 
-// FIXME: invariant_tests.rs has pre-existing compilation errors from a merge conflict
-// #[cfg(test)]
-// mod invariant_tests;
+#[cfg(test)]
+#[allow(clippy::module_inception)]
+mod invariant_tests;
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod upgrade_tests;
 
 // ── Error Codes ────────────────────────────────────────────────────────────
@@ -1264,14 +1267,14 @@ impl IpRegistry {
         signers: soroban_sdk::Vec<Address>,
     ) {
         require_ip_exists(&env, ip_id);
-        if threshold == 0 || threshold > signers.len() as u32 {
+        if threshold == 0 || threshold > signers.len() {
             panic_with_error!(&env, ContractError::ThresholdNotMet);
         }
 
         let config = ThresholdConfig {
             ip_id,
             threshold,
-            total: signers.len() as u32,
+            total: signers.len(),
             signers: signers.clone(),
         };
 
@@ -1343,7 +1346,7 @@ impl IpRegistry {
             None => return false,
         };
         let signatures = Self::get_threshold_signatures(env.clone(), ip_id);
-        signatures.len() >= config.threshold as u32
+        signatures.len() >= config.threshold
     }
 
     // ── Issue #455: Batch Metadata ──────────────────────────────────────────
@@ -1400,7 +1403,7 @@ impl IpRegistry {
         let hash = record.commitment_hash;
 
         match algo {
-            CompressionAlgo::None => Bytes::from_array(&env, &hash.to_array()).into(),
+            CompressionAlgo::None => Bytes::from_array(&env, &hash.to_array()),
             CompressionAlgo::Truncate16 => {
                 let mut bytes = Bytes::new(&env);
                 let arr = hash.to_array();
@@ -1580,7 +1583,6 @@ impl IpRegistry {
         (entropy_score + pow_score).min(100)
     }
 
-    /// Returns the current protocol configuration.
     // get_protocol_config removed - ProtocolConfig type not defined
 
     /// Verify that a commitment hash meets the PoW requirement for a given nonce.
@@ -1732,18 +1734,11 @@ impl IpRegistry {
         }
     }
 
-    /// Set or update the expiry timestamp for an IP. Owner-only.
-    /// Pass 0 to remove expiry.
-        // set_ip_expiry removed - expiry_timestamp field not in IpRecord
+    // set_ip_expiry removed - expiry_timestamp field not in IpRecord
 
-    /// Renew an IP's expiry to extend its protection period. Owner-only.
-    ///
-    /// `new_expiry` must be strictly greater than the current expiry timestamp.
-    /// Emits an event with (ip_id, old_expiry, new_expiry).
-        // renew_ip removed - expiry_timestamp field not in IpRecord
+    // renew_ip removed - expiry_timestamp field not in IpRecord
 
-    /// Set or update metadata for an IP (max 1 KB). Owner-only.
-        // set_ip_metadata removed - metadata field not in IpRecord
+    // set_ip_metadata removed - metadata field not in IpRecord
 
     /// Grant a license for an IP to a licensee. Owner-only.
     pub fn grant_license(env: Env, ip_id: u64, licensee: Address, terms_hash: BytesN<32>) {
@@ -2183,7 +2178,7 @@ impl IpRegistry {
             .get(&DataKey::OwnerIps(owner))
             .unwrap_or(Vec::new(&env));
 
-        if ip_ids.len() == 0 {
+        if ip_ids.is_empty() {
             return BytesN::from_array(&env, &[0u8; 32]);
         }
 
@@ -2286,7 +2281,7 @@ impl IpRegistry {
         let mut current_index = index;
 
         while current_level.len() > 1 {
-            let sibling_index = if current_index % 2 == 0 {
+            let sibling_index = if current_index.is_multiple_of(2) {
                 current_index + 1
             } else {
                 current_index - 1
@@ -2323,7 +2318,7 @@ impl IpRegistry {
     }
 
     fn merkle_root(env: &Env, hashes: &Vec<BytesN<32>>) -> BytesN<32> {
-        if hashes.len() == 0 {
+        if hashes.is_empty() {
             return BytesN::from_array(env, &[0u8; 32]);
         }
         if hashes.len() == 1 {
@@ -2399,7 +2394,7 @@ impl IpRegistry {
         let record = require_ip_exists(&env, ip_id);
         record.owner.require_auth();
 
-        if access_level < 1 || access_level > 3 {
+        if !(1..=3).contains(&access_level) {
             env.panic_with_error(Error::from_contract_error(ContractError::Unauthorized as u32));
         }
 
@@ -2592,26 +2587,15 @@ impl IpRegistry {
 
     // ── Third-Party Attestations ───────────────────────────────────────────────
 
-    /// Allow any third party (notary, university, etc.) to attest to an IP's authenticity.
-    ///
-    /// Anyone can call this — no owner restriction. The attestor must authorize the call.
-        // attest_ip removed - IpAttestations DataKey variant not defined
+    // attest_ip removed - IpAttestations DataKey variant not defined
 
-    /// Retrieve all attestations for a given IP.
-        // get_ip_attestations removed - IpAttestations DataKey variant not defined
+    // get_ip_attestations removed - IpAttestations DataKey variant not defined
 
     // ── IP Dispute Challenges ─────────────────────────────────────────────────
 
-    /// Submit a challenge against an IP commitment. Anyone can challenge.
-    ///
-    /// The challenger must authorize the call. Appends a new `IpChallenge` to
-    /// the dispute list for the given IP.
-        // challenge_ip removed - IpDisputes DataKey variant not defined
+    // challenge_ip removed - IpDisputes DataKey variant not defined
 
-    /// Resolve all open disputes for an IP. Admin-only.
-    ///
-    /// Marks every unresolved challenge as resolved with the provided `resolution`.
-        // resolve_ip_dispute removed - IpDisputes DataKey variant not defined
+    // resolve_ip_dispute removed - IpDisputes DataKey variant not defined
 
     // get_ip_disputes removed - IpDisputes DataKey variant not defined
 
@@ -2681,11 +2665,8 @@ impl IpRegistry {
             .storage()
             .persistent()
             .get(&DataKey::CommitmentOwner(commitment_hash.clone()));
-        if owner.is_none() {
-            return None;
-        }
         // Walk the owner's IP list to find the matching record
-        let owner_addr = owner.unwrap();
+        let owner_addr = owner?;
         let ids: Vec<u64> = env
             .storage()
             .persistent()
@@ -3950,7 +3931,7 @@ impl IpRegistry {
     ///
     /// Panics with `IpNotFound` if any `ip_id` does not exist.
     pub fn batch_verify_commitments(env: Env, requests: Vec<VerifyRequest>) -> Vec<VerifyResult> {
-        let total_count = requests.len() as u32;
+        let total_count = requests.len();
         let mut results = Vec::new(&env);
         let mut valid_hashes: Vec<BytesN<32>> = Vec::new(&env);
 
@@ -3973,7 +3954,7 @@ impl IpRegistry {
             }
         }
 
-        let valid_count = valid_hashes.len() as u32;
+        let valid_count = valid_hashes.len();
         let aggregate_proof = aggregate_batch_proof(&env, &valid_hashes);
 
         let stored = BatchVerifyResultStorage {
@@ -4019,7 +4000,7 @@ impl IpRegistry {
         let category_hash: BytesN<32> = env.crypto().sha256(&path).into();
 
         let mut depth: u32 = 1;
-        if path.len() > 0 {
+        if !path.is_empty() {
             for byte in path.iter() {
                 if byte == b'/' {
                     depth += 1;
@@ -4706,7 +4687,7 @@ mod tests {
         let ip_id = client.commit_ip(&owner, &hash, &0u32);
 
         let batch_id = BytesN::from_array(&env, &[0xBAu8; 32]);
-        let description = soroban_sdk::Bytes::from_array(&env, &[b'h', b'e', b'l', b'l', b'o']);
+        let description = soroban_sdk::Bytes::from_array(&env, b"hello");
 
         client.set_batch_metadata(&ip_id, &batch_id, &description);
 
@@ -4761,8 +4742,8 @@ mod tests {
         let batch_id1 = BytesN::from_array(&env, &[0x01u8; 32]);
         let batch_id2 = BytesN::from_array(&env, &[0x02u8; 32]);
 
-        client.set_batch_metadata(&ip_id, &batch_id1, &soroban_sdk::Bytes::from_array(&env, &[b'v', b'1']));
-        client.set_batch_metadata(&ip_id, &batch_id2, &soroban_sdk::Bytes::from_array(&env, &[b'v', b'2']));
+        client.set_batch_metadata(&ip_id, &batch_id1, &soroban_sdk::Bytes::from_array(&env, b"v1"));
+        client.set_batch_metadata(&ip_id, &batch_id2, &soroban_sdk::Bytes::from_array(&env, b"v2"));
 
         assert_eq!(client.get_batch_metadata(&ip_id).unwrap().batch_id, batch_id2);
     }
